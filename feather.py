@@ -4,6 +4,7 @@ from scipy import fftpack
 import astropy.io.fits as fits
 import numpy as np
 #import pylab as py
+import os
 import sys
 # Regridding
 import montage_wrapper as montage
@@ -66,11 +67,6 @@ def feather(lowres, highres, exportpsf):
     bmin_highres = hdu_highres[0].header["BMIN"]
     bpa_highres = hdu_highres[0].header["BPA"]
 
-    # Regrid low-res
-    lowres_rg = lowres.replace(".fits", "_montaged.fits")
-    montage.mGetHdr(highres,"temp.txt")
-    montage.reproject(lowres,lowres_rg,header="temp.txt",exact_size=True)
-
 # Test whether the file has a beam
     original = fits.open(lowres)
     try:
@@ -78,6 +74,14 @@ def feather(lowres, highres, exportpsf):
     except KeyError:
        print "No valid beam in header of "+lowres
        sys.exit(1)
+
+    # Regrid low-res
+    lowres_rg = lowres.replace(".fits", "_montaged.fits")
+    if not os.path.exists(lowres_rg):
+        montage.mGetHdr(highres,"temp.txt")
+        montage.reproject(lowres,lowres_rg,header="temp.txt",exact_size=True)
+    else:
+        print "Will not overwrite existing regridded image "+lowres_rg
 
 # Montage copies ALL the fits keys across, including the beam values! So we need to replace those with the original values
     hdu_lowres = fits.open(lowres_rg)
