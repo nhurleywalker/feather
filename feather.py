@@ -50,7 +50,7 @@ def exportfits(data, header, outfile):
     newlist = fits.HDUList([new]) #create new hdulist
     newlist.writeto(outfile, overwrite = True)
 
-def feather(lowres, highres, exportpsf):
+def feather(lowres, highres, exportpsf, sdfactor, regrid):
     # Import high-res
     hdu_highres = fits.open(highres)
     # Single -> Double, remove redundant axes
@@ -67,6 +67,7 @@ def feather(lowres, highres, exportpsf):
     bmin_highres = hdu_highres[0].header["BMIN"]
     bpa_highres = hdu_highres[0].header["BPA"]
 
+# Montage copies ALL the fits keys across, including the beam values! So we need to replace those with the original values
 # Test whether the file has a beam
     original = fits.open(lowres)
     try:
@@ -76,14 +77,18 @@ def feather(lowres, highres, exportpsf):
        sys.exit(1)
 
     # Regrid low-res
-    lowres_rg = lowres.replace(".fits", "_montaged.fits")
-    if not os.path.exists(lowres_rg):
-        montage.mGetHdr(highres,"temp.txt")
-        montage.reproject(lowres,lowres_rg,header="temp.txt",exact_size=True)
+    if regrid:
+        lowres_rg = lowres.replace(".fits", "_montaged.fits")
+        if not os.path.exists(lowres_rg):
+            montage.mGetHdr(highres,"temp.txt")
+            montage.reproject(lowres,lowres_rg,header="temp.txt",exact_size=True)
+        else:
+            print "Will not overwrite existing regridded image "+lowres_rg
     else:
-        print "Will not overwrite existing regridded image "+lowres_rg
+        print "Not regridding; expecting image co-ordinates to match exactly."
+        lowres_rg = lowres
+# TODO: add a test for image co-ordinate match rather than letting it get to the FT then fail
 
-# Montage copies ALL the fits keys across, including the beam values! So we need to replace those with the original values
     hdu_lowres = fits.open(lowres_rg)
     newhdr = hdu_lowres[0].header
     for fitskey in ["BMAJ", "BMIN", "BPA"]:
@@ -125,7 +130,7 @@ def feather(lowres, highres, exportpsf):
     # Scale the low-resolution image by the ratio of the volumes of the two clean beams
     # (high-res / low-res)
 
-    ratio = (bmaj_highres*bmin_highres) / (bmaj_lowres*bmin_lowres)
+    ratio = (sdfactor*bmaj_highres*bmin_highres) / (bmaj_lowres*bmin_lowres)
     print ratio
 
     #Add to this, the uv-grid of the high-resolution image, scaled by  
@@ -174,10 +179,16 @@ if __name__ == "__main__":
     group1.add_argument('--highres', dest='highres', default=None, \
                         help="High-resolution file to read")
     group2 = parser.add_argument_group("functions to perform")
+    group2.add_argument('--regrid', dest='regrid', default=False, action='store_true', \
+                        help="Perform regridding with montage to match the low-resolution image to the high-resolution image; \
+                              if this is not selected then the image co-ordinates must already match exactly. (default = False)")
     group2.add_argument('--psf', dest='psf', default=False, action='store_true', \
                         help="Save the intermediate PSF FFT information (default = False)")
     group2.add_argument('--plot', dest='makeplots', default=False, action='store_true', \
                         help="Make png plots of the FITS images and FFTs (Currently disabled)")
+    group3 = parser.add_argument_group("fiddle factors")
+    group3.add_argument('--sdfactor', dest='sdfactor', default=1.0, type=float, \
+                        help="Float by which to multiply the low-resolution data (default = 1.0)")
 
     options = parser.parse_args()
 
@@ -186,4 +197,4 @@ if __name__ == "__main__":
         sys.exit()
 
     # Perform the feathering
-    feather(options.lowres, options.highres, options.psf)
+    feather(options.lowres, options.highres, options.psf, options.sdfactor, options.regrid)
