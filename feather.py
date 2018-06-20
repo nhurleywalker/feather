@@ -46,7 +46,8 @@ def ifft(data):
 
 def exportfits(data, header, outfile):
     print "writing to "+outfile
-    new = fits.PrimaryHDU(data ,header=header) #create new hdu
+    # Convert back to float32 to make the files smaller
+    new = fits.PrimaryHDU(data.astype(np.float32) ,header=header) #create new hdu
     newlist = fits.HDUList([new]) #create new hdulist
     newlist.writeto(outfile, overwrite = True)
 
