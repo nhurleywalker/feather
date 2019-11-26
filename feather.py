@@ -7,7 +7,10 @@ import numpy as np
 import os
 import sys
 # Regridding
-import montage_wrapper as montage
+try:
+    import montage_wrapper as montage
+except ImportError:
+    print("WARNING: Montage not installed; your image sizes will need to match exactly.")
 
 import argparse
 
@@ -53,123 +56,131 @@ def exportfits(data, header, outfile):
 
 def feather(lowres, highres, exportpsf, sdfactor, regrid):
     # Import high-res
-    hdu_highres = fits.open(highres)
-    # Single -> Double, remove redundant axes
-    hr = np.squeeze(np.squeeze(hdu_highres[0].data.astype(float)))
-    # Replace NaNs with zeros
-    replace = np.isnan(hr)
-    hr[replace]=0.0
-
-    try:
-        bmaj_highres = hdu_highres[0].header["BMAJ"]
-    except KeyError:
-        print("No valid beam in header of {0}".format(highres))
-        sys.exit(1)
-    bmin_highres = hdu_highres[0].header["BMIN"]
-    bpa_highres = hdu_highres[0].header["BPA"]
-
-# Montage copies ALL the fits keys across, including the beam values! So we need to replace those with the original values
-# Test whether the file has a beam
     original = fits.open(lowres)
-    try:
-        bmaj_lowres = original[0].header["BMAJ"]
-    except KeyError:
-       print("No valid beam in header of {0}".format(lowres))
-       sys.exit(1)
-
-    # Regrid low-res
-    if regrid:
-        lowres_rg = lowres.replace(".fits", "_montaged.fits")
-        if not os.path.exists(lowres_rg):
-            montage.mGetHdr(highres,"temp.txt")
-            montage.reproject(lowres,lowres_rg,header="temp.txt",exact_size=True)
-        else:
-            print("Will not overwrite existing regridded image {0}".format(lowres_rg))
+    hdu_highres = fits.open(highres)
+    if regrid is False:
+        nx1_highres = hdu_highres[0].header["NAXIS1"]
+        nx2_highres = hdu_highres[0].header["NAXIS2"]
+        nx1_original = original[0].header["NAXIS1"]
+        nx2_original = original[0].header["NAXIS2"]
+        if nx1_highres != nx1_original or nx2_highres != nx2_original:
+            print("Images are not the same size, and --regrid was not selected")
     else:
-        print("Not regridding; expecting image co-ordinates to match exactly.")
-        lowres_rg = lowres
-# TODO: add a test for image co-ordinate match rather than letting it get to the FT then fail
+        # Single -> Double, remove redundant axes
+        hr = np.squeeze(np.squeeze(hdu_highres[0].data.astype(float)))
+        # Replace NaNs with zeros
+        replace = np.isnan(hr)
+        hr[replace]=0.0
 
-    hdu_lowres = fits.open(lowres_rg)
-    newhdr = hdu_lowres[0].header
-    for fitskey in ["BMAJ", "BMIN", "BPA"]:
-        newhdr[fitskey] = original[0].header[fitskey]
-#        print fitskey, original[0].header[fitskey]
-    try:
-        naxis4 = newhdr["NAXIS4"]
-    except:
-        naxis4 = None
-    if naxis4:
-        newhdr["NAXIS"] = 4
-
-    hdu_lowres.writeto(lowres_rg, overwrite = True)
-
-    # Import regridded low-res
-    hdu_lowres = fits.open(lowres_rg)
-    # Single -> Double, remove redundant axes
-    lr = np.squeeze(np.squeeze(hdu_lowres[0].data.astype(float)))
-    # Replace NaNs with zeros
-    replace = np.isnan(lr)
-    lr[replace]=0.0
-
-    bmaj_lowres = hdu_lowres[0].header["BMAJ"]
-    bmin_lowres = hdu_lowres[0].header["BMIN"]
-    bpa_lowres = hdu_lowres[0].header["BPA"]
-
-
-# TODO: enable diagnostic plots
-# if plots
-#    py.figure(1)
-#    py.clf()
-#    py.imshow(np.log10(highres))
-#    py.savefig("highres.png")
-
-    hr_fft = fft(hr)
-    lr_fft = fft(lr)
-
-    # According to https://casa.nrao.edu/docs/taskref/feather-task.html
-    # Scale the low-resolution image by the ratio of the volumes of the two clean beams
-    # (high-res / low-res)
-
-    ratio = (sdfactor*bmaj_highres*bmin_highres) / (bmaj_lowres*bmin_lowres)
-
-    #Add to this, the uv-grid of the high-resolution image, scaled by  
-    #                   (1-wt) where "wt" is the Fourier transform of the "clean beam"
-    #                   defined in the low-resolution image.  
-
-    # Make a model image of low-resolution psf
-    xmax = hdu_lowres[0].header["NAXIS1"]
-    ymax = hdu_lowres[0].header["NAXIS2"]
-    try:
-        pix2deg = hdu_lowres[0].header["CDELT2"]
-    except KeyError:
-        pix2deg = hdu_lowres[0].header["CD2_2"]
-
-    x, y = np.meshgrid(np.linspace(0,xmax,xmax), np.linspace(0,ymax,ymax))
-
-    sigmax = bmaj_lowres / (pix2deg * sig2fwhm)
-    sigmay = bmin_lowres / (pix2deg * sig2fwhm)
-    mux = xmax/2 + 0.5
-    muy = ymax/2 + 0.5
-
-    g = gaussian2d(x, y, mux, muy, sigmax, sigmay, np.deg2rad(bpa_lowres))
-    g_fft = fft(g)
-
-    if exportpsf:
-        exportfits(g, hdu_highres[0].header, lowres.replace(".fits","_psf.fits"))
-        exportfits(np.real(g_fft), hdu_highres[0].header, lowres.replace(".fits","_psf_fft_real.fits"))
         try:
-            exportfits(np.imag(g_fft), hdu_highres[0].header, lowres.replace(".fits","_psf_fft_imag.fits"))
+            bmaj_highres = hdu_highres[0].header["BMAJ"]
+        except KeyError:
+            print("No valid beam in header of {0}".format(highres))
+            sys.exit(1)
+        bmin_highres = hdu_highres[0].header["BMIN"]
+        bpa_highres = hdu_highres[0].header["BPA"]
+
+    # Montage copies ALL the fits keys across, including the beam values! So we need to replace those with the original values
+    # Test whether the file has a beam
+        try:
+            bmaj_lowres = original[0].header["BMAJ"]
+        except KeyError:
+           print("No valid beam in header of {0}".format(lowres))
+           sys.exit(1)
+
+        # Regrid low-res
+        if regrid:
+            lowres_rg = lowres.replace(".fits", "_montaged.fits")
+            if not os.path.exists(lowres_rg):
+                montage.mGetHdr(highres,"temp.txt")
+                montage.reproject(lowres,lowres_rg,header="temp.txt",exact_size=True)
+            else:
+                print("Will not overwrite existing regridded image {0}".format(lowres_rg))
+        else:
+            print("Not regridding; expecting image co-ordinates to match exactly.")
+            lowres_rg = lowres
+    # TODO: add a test for image co-ordinate match rather than letting it get to the FT then fail
+
+        hdu_lowres = fits.open(lowres_rg)
+        newhdr = hdu_lowres[0].header
+        for fitskey in ["BMAJ", "BMIN", "BPA"]:
+            newhdr[fitskey] = original[0].header[fitskey]
+    #        print fitskey, original[0].header[fitskey]
+        try:
+            naxis4 = newhdr["NAXIS4"]
         except:
-# I get some weird errors when I try to export an incredibly tiny imaginary part, but this works:
-            exportfits(np.zeros(g_fft.shape), hdu_highres[0].header, lowres.replace(".fits","_psf_fft_imag.fits"))
+            naxis4 = None
+        if naxis4:
+            newhdr["NAXIS"] = 4
 
-    # Add together
-    comb_fft = ratio * lr_fft + (1 - (g_fft/np.nanmax(g_fft))) * hr_fft
+        hdu_lowres.writeto(lowres_rg, overwrite = True)
 
-    # Inverse FFT
-    comb = ifft(comb_fft)
-    exportfits(comb, hdu_highres[0].header, highres.replace(".fits","+")+lowres)
+        # Import regridded low-res
+        hdu_lowres = fits.open(lowres_rg)
+        # Single -> Double, remove redundant axes
+        lr = np.squeeze(np.squeeze(hdu_lowres[0].data.astype(float)))
+        # Replace NaNs with zeros
+        replace = np.isnan(lr)
+        lr[replace]=0.0
+
+        bmaj_lowres = hdu_lowres[0].header["BMAJ"]
+        bmin_lowres = hdu_lowres[0].header["BMIN"]
+        bpa_lowres = hdu_lowres[0].header["BPA"]
+
+
+    # TODO: enable diagnostic plots
+    # if plots
+    #    py.figure(1)
+    #    py.clf()
+    #    py.imshow(np.log10(highres))
+    #    py.savefig("highres.png")
+
+        hr_fft = fft(hr)
+        lr_fft = fft(lr)
+
+        # According to https://casa.nrao.edu/docs/taskref/feather-task.html
+        # Scale the low-resolution image by the ratio of the volumes of the two clean beams
+        # (high-res / low-res)
+
+        ratio = (sdfactor*bmaj_highres*bmin_highres) / (bmaj_lowres*bmin_lowres)
+
+        #Add to this, the uv-grid of the high-resolution image, scaled by  
+        #                   (1-wt) where "wt" is the Fourier transform of the "clean beam"
+        #                   defined in the low-resolution image.  
+
+        # Make a model image of low-resolution psf
+        xmax = hdu_lowres[0].header["NAXIS1"]
+        ymax = hdu_lowres[0].header["NAXIS2"]
+        try:
+            pix2deg = hdu_lowres[0].header["CDELT2"]
+        except KeyError:
+            pix2deg = hdu_lowres[0].header["CD2_2"]
+
+        x, y = np.meshgrid(np.linspace(0,xmax,xmax), np.linspace(0,ymax,ymax))
+
+        sigmax = bmaj_lowres / (pix2deg * sig2fwhm)
+        sigmay = bmin_lowres / (pix2deg * sig2fwhm)
+        mux = xmax/2 + 0.5
+        muy = ymax/2 + 0.5
+
+        g = gaussian2d(x, y, mux, muy, sigmax, sigmay, np.deg2rad(bpa_lowres))
+        g_fft = fft(g)
+
+        if exportpsf:
+            exportfits(g, hdu_highres[0].header, lowres.replace(".fits","_psf.fits"))
+            exportfits(np.real(g_fft), hdu_highres[0].header, lowres.replace(".fits","_psf_fft_real.fits"))
+            try:
+                exportfits(np.imag(g_fft), hdu_highres[0].header, lowres.replace(".fits","_psf_fft_imag.fits"))
+            except:
+    # I get some weird errors when I try to export an incredibly tiny imaginary part, but this works:
+                exportfits(np.zeros(g_fft.shape), hdu_highres[0].header, lowres.replace(".fits","_psf_fft_imag.fits"))
+
+        # Add together
+        comb_fft = ratio * lr_fft + (1 - (g_fft/np.nanmax(g_fft))) * hr_fft
+
+        # Inverse FFT
+        comb = ifft(comb_fft)
+        exportfits(comb, hdu_highres[0].header, highres.replace(".fits","+")+lowres)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
