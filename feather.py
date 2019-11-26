@@ -45,7 +45,7 @@ def ifft(data):
 
 
 def exportfits(data, header, outfile):
-    print "writing to "+outfile
+    print("writing to {0}".format(outfile))
     # Convert back to float32 to make the files smaller
     new = fits.PrimaryHDU(data.astype(np.float32) ,header=header) #create new hdu
     newlist = fits.HDUList([new]) #create new hdulist
@@ -63,7 +63,7 @@ def feather(lowres, highres, exportpsf, sdfactor, regrid):
     try:
         bmaj_highres = hdu_highres[0].header["BMAJ"]
     except KeyError:
-        print "No valid beam in header of "+highres
+        print("No valid beam in header of {0}".format(highres))
         sys.exit(1)
     bmin_highres = hdu_highres[0].header["BMIN"]
     bpa_highres = hdu_highres[0].header["BPA"]
@@ -74,7 +74,7 @@ def feather(lowres, highres, exportpsf, sdfactor, regrid):
     try:
         bmaj_lowres = original[0].header["BMAJ"]
     except KeyError:
-       print "No valid beam in header of "+lowres
+       print("No valid beam in header of {0}".format(lowres))
        sys.exit(1)
 
     # Regrid low-res
@@ -84,9 +84,9 @@ def feather(lowres, highres, exportpsf, sdfactor, regrid):
             montage.mGetHdr(highres,"temp.txt")
             montage.reproject(lowres,lowres_rg,header="temp.txt",exact_size=True)
         else:
-            print "Will not overwrite existing regridded image "+lowres_rg
+            print("Will not overwrite existing regridded image {0}".format(lowres_rg))
     else:
-        print "Not regridding; expecting image co-ordinates to match exactly."
+        print("Not regridding; expecting image co-ordinates to match exactly.")
         lowres_rg = lowres
 # TODO: add a test for image co-ordinate match rather than letting it get to the FT then fail
 
@@ -132,7 +132,6 @@ def feather(lowres, highres, exportpsf, sdfactor, regrid):
     # (high-res / low-res)
 
     ratio = (sdfactor*bmaj_highres*bmin_highres) / (bmaj_lowres*bmin_lowres)
-    print ratio
 
     #Add to this, the uv-grid of the high-resolution image, scaled by  
     #                   (1-wt) where "wt" is the Fourier transform of the "clean beam"
