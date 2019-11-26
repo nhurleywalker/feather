@@ -7,10 +7,12 @@ import numpy as np
 import os
 import sys
 # Regridding
+useMontage = True
 try:
     import montage_wrapper as montage
 except ImportError:
     print("WARNING: Montage not installed; your image sizes will need to match exactly.")
+    useMontage = False
 
 import argparse
 
@@ -206,6 +208,9 @@ if __name__ == "__main__":
     if len(sys.argv) <= 2:
         parser.print_help()
         sys.exit()
+
+    if useMontage is False:
+        options.regrid = False
 
     # Perform the feathering
     feather(options.lowres, options.highres, options.psf, options.sdfactor, options.regrid)
